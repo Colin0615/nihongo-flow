@@ -1570,33 +1570,68 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
   };
 
   
-  return (
+return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
-            {notebookMsg && (
-              <div className="max-w-xl mx-auto text-center text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-xl">
-                {notebookMsg}
-              </div>
-            )}
+      {notebookMsg && (
+        <div className="max-w-xl mx-auto text-center text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-xl">
+          {notebookMsg}
+        </div>
+      )}
+  
       <div className="text-center space-y-6 pt-10">
         <h2 className="text-3xl font-bold text-gray-900">今天想学什么？</h2>
         <div className="flex flex-col gap-4 max-w-xl mx-auto">
           <div className="flex items-center gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
-            <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如: 居酒屋点餐, 商务邮件回复..." className="flex-1 px-4 py-2 bg-transparent outline-none text-lg" onKeyDown={(e) => e.key === 'Enter' && handleGenerate()} />
-            <button onClick={handleGenerate} disabled={loading} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-800 disabled:opacity-50 transition-all">{loading ? <RefreshCw className="animate-spin" /> : <Brain size={20} />} 生成课程</button>
+            <input
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="例如: 居酒屋点餐, 商务邮件回复..."
+              className="flex-1 px-4 py-2 bg-transparent outline-none text-lg"
+              onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={loading}
+              className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-800 disabled:opacity-50 transition-all"
+            >
+              {loading ? <RefreshCw className="animate-spin" /> : <Brain size={20} />} 生成课程
+            </button>
           </div>
+  
           <div className="flex justify-center gap-2">
-            {(['N5', 'N4', 'N3', 'N2', 'N1'] as JLPTLevel[]).map((lvl) => (
-              <button key={lvl} onClick={() => setLevel(lvl)} className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${level === lvl ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>{lvl}</button>
+            {(["N5", "N4", "N3", "N2", "N1"] as JLPTLevel[]).map((lvl) => (
+              <button
+                key={lvl}
+                onClick={() => setLevel(lvl)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                  level === lvl ? "bg-indigo-600 text-white shadow-md" : "bg-white text-gray-400 hover:bg-gray-50"
+                }`}
+              >
+                {lvl}
+              </button>
             ))}
           </div>
         </div>
-        <div className="flex justify-center gap-2 text-xs text-gray-400"><span>模型: {settings.selectedModel === 'gemini' ? '⚡ Gemini 3 Flash' : '🧠 gpt-5.2'}</span></div>
+  
+        <div className="flex justify-center gap-2 text-xs text-gray-400">
+          <span>模型: {settings.selectedModel === "gemini" ? "⚡ Gemini 3 Flash" : "🧠 gpt-5.2"}</span>
+        </div>
+  
         {errorMsg && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{errorMsg}</div>}
       </div>
-
+  
       {course && (
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700">
-          <div className="text-center border-b border-gray-200 pb-6"><span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">AI 课程 ({level})</span><div className="text-4xl font-bold text-gray-900 mt-2 mb-2 flex justify-center gap-3"><FuriganaText segments={course.title} /><PlayButton text={course.title} size="lg" /></div><p className="text-gray-500">{course.topic}</p></div>
+          <div className="text-center border-b border-gray-200 pb-6">
+            <span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">AI 课程 ({level})</span>
+            <div className="text-4xl font-bold text-gray-900 mt-2 mb-2 flex justify-center gap-3">
+              <FuriganaText segments={course.title} />
+              <PlayButton text={course.title} size="lg" />
+            </div>
+            <p className="text-gray-500">{course.topic}</p>
+          </div>
+  
+          {/* 词汇 */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -1609,20 +1644,28 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
                 整表加入单词本
               </button>
             </div>
+  
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {course.vocabulary.map((vocab: any, i: number) => (
-                <button key={i} onClick={() => setSelectedVocab(vocab)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all text-left group">
-                  <div className="text-lg font-bold text-gray-800 mb-1 group-hover:text-indigo-600"><FuriganaText segments={vocab.word} /></div>
+                <button
+                  key={i}
+                  onClick={() => setSelectedVocab(vocab)}
+                  className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all text-left group"
+                >
+                  <div className="text-lg font-bold text-gray-800 mb-1 group-hover:text-indigo-600">
+                    <FuriganaText segments={vocab.word} />
+                  </div>
                   <div className="text-xs text-gray-400 truncate">{vocab.meaning}</div>
                 </button>
               ))}
             </div>
           </section>
-          
+  
+          {/* 语法 */}
           <section>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <div className="w-1 h-6 bg-pink-500 rounded-full"/> 关键语法
+                <div className="w-1 h-6 bg-pink-500 rounded-full" /> 关键语法
               </h3>
               <button
                 onClick={() => addGrammarToNotebook(course.grammar)}
@@ -1631,6 +1674,7 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
                 整段加入语法本
               </button>
             </div>
+  
             <div className="space-y-4">
               {course.grammar.map((g: any, i: number) => (
                 <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
@@ -1643,9 +1687,9 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
                       加入语法本
                     </button>
                   </div>
-              
+  
                   <p className="text-sm text-gray-600 mb-4">{g.explanation}</p>
-              
+  
                   <div className="bg-gray-50 p-3 rounded-xl flex gap-3 items-start">
                     <PlayButton text={g.example.text} size="sm" />
                     <div>
@@ -1657,163 +1701,174 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
               ))}
             </div>
           </section>
-
-         <section>
-          <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <div className="w-1 h-6 bg-emerald-500 rounded-full" /> 对话与短文
-          </h3>
-        
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* 左：对话 */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-bold text-gray-400 text-xs uppercase">场景对话</h4>
-                <button
-                  onClick={() => addTextToNotebook(course.texts.dialogue)}
-                  className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
-                >
-                  对话全加入课文本
-                </button>
-              </div>
-        
-              {course.texts.dialogue.map((line: any, i: number) => (
-                <div key={i} className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
-                    {line.role}
-                  </div>
-        
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <PlayButton text={line.text} size="sm" />
-                          <FuriganaText segments={line.text} className="text-lg font-medium" />
-                        </div>
-                        <p className="text-sm text-gray-400 pl-8">{line.translation}</p>
-                      </div>
-        
-                      <button
-                        onClick={(e) => { e.stopPropagation(); addTextToNotebook([line]); }}
-                        className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
-                      >
-                        加入
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-        
-            {/* 右：短文 */}
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="flex justify-between items-center mb-4 gap-2">
-                <h4 className="font-bold text-gray-400 text-xs uppercase">{course.texts.essay.title}</h4>
-        
-                <div className="flex items-center gap-2">
+  
+          {/* 对话与短文 */}
+          <section>
+            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <div className="w-1 h-6 bg-emerald-500 rounded-full" /> 对话与短文
+            </h3>
+  
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* 左：对话 */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-gray-400 text-xs uppercase">场景对话</h4>
                   <button
-                    onClick={() => addTextToNotebook(course.texts.essay.content)}
+                    onClick={() => addTextToNotebook(course.texts.dialogue)}
                     className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
                   >
-                    短文全加入课文本
+                    对话全加入课文本
                   </button>
-                  <EssayPlayer segments={course.texts.essay.content} />
                 </div>
-              </div>
-        
-              <div className="space-y-6">
-                {course.texts.essay.content.map((sent: any, i: number) => (
-                  <div
-                    key={i}
-                    className="group cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
-                  >
-                    <div className="flex gap-3 items-start justify-between">
-                      <div className="flex gap-3 items-start">
-                        <PlayButton text={sent.text} size="sm" />
+  
+                {course.texts.dialogue.map((line: any, i: number) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                      {line.role}
+                    </div>
+  
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <FuriganaText segments={sent.text} className="text-lg text-gray-800 leading-8" />
-                          <div className="text-sm text-gray-500 mt-1 border-t border-gray-100 pt-1">
-                            {sent.translation}
+                          <div className="flex items-center gap-2">
+                            <PlayButton text={line.text} size="sm" />
+                            <FuriganaText segments={line.text} className="text-lg font-medium" />
                           </div>
+                          <p className="text-sm text-gray-400 pl-8">{line.translation}</p>
                         </div>
+  
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addTextToNotebook([line]);
+                          }}
+                          className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                        >
+                          加入
+                        </button>
                       </div>
-        
-                      <button
-                        onClick={(e) => { e.stopPropagation(); addTextToNotebook([sent]); }}
-                        className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
-                      >
-                        加入
-                      </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-        <div className="flex justify-center pb-10"><button onClick={handleSave} disabled={isSaved} className={`px-8 py-4 rounded-full font-bold flex items-center gap-2 transition-all shadow-lg ${isSaved ? 'bg-green-100 text-green-700' : 'bg-gray-900 text-white hover:scale-105'}`}>{isSaved ? <CheckCircle size={20} /> : <Save size={20} />} {isSaved ? '已归档' : '完成并归档'}</button></div>
-        </div>
-      )}
-{selectedVocab && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
-        <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl relative animate-in zoom-in-95 duration-200">
-          <button
-            onClick={() => setSelectedVocab(null)}
-            className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
-          >
-            <X size={20} />
-          </button>
-
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-wider">
-              {selectedVocab.grammar_tag}
-            </div>
-
-            <div className="text-5xl font-bold text-gray-900 mb-2">
-              <FuriganaText segments={selectedVocab.word} />
-            </div>
-
-            <PlayButton text={selectedVocab.word} size="lg" />
-
-            <p className="text-xl text-gray-600 font-medium">{selectedVocab.meaning}</p>
-
-            <div className="w-full bg-gray-50 rounded-2xl p-6 mt-6 text-left">
-              <div className="text-xs text-gray-400 font-bold uppercase mb-3">例句</div>
-
-              <div className="flex gap-3 items-start mb-2">
-                <PlayButton text={selectedVocab.example.text} size="sm" />
-                <FuriganaText
-                  segments={selectedVocab.example.text}
-                  className="text-lg font-medium text-gray-800"
-                />
-              </div>
-
-              <p className="text-sm text-gray-500 pl-9">{selectedVocab.example.translation}</p>
-
-              {selectedVocab.example.grammar_point && (
-                <div className="mt-4 pt-3 border-t border-gray-200/50">
-                  <div className="flex gap-2 items-center mb-1">
-                    <Brain size={14} className="text-pink-500" />
-                    <span className="text-xs font-bold text-gray-400 uppercase">语法深度解析</span>
+  
+              {/* 右：短文 */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <div className="flex justify-between items-center mb-4 gap-2">
+                  <h4 className="font-bold text-gray-400 text-xs uppercase">{course.texts.essay.title}</h4>
+  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => addTextToNotebook(course.texts.essay.content)}
+                      className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
+                    >
+                      短文全加入课文本
+                    </button>
+                    <EssayPlayer segments={course.texts.essay.content} />
                   </div>
-                  <p className="text-sm text-gray-700 leading-relaxed pl-6">
-                    {selectedVocab.example.grammar_point}
-                  </p>
                 </div>
-              )}
+  
+                <div className="space-y-6">
+                  {course.texts.essay.content.map((sent: any, i: number) => (
+                    <div key={i} className="group cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors">
+                      <div className="flex gap-3 items-start justify-between">
+                        <div className="flex gap-3 items-start">
+                          <PlayButton text={sent.text} size="sm" />
+                          <div>
+                            <FuriganaText segments={sent.text} className="text-lg text-gray-800 leading-8" />
+                            <div className="text-sm text-gray-500 mt-1 border-t border-gray-100 pt-1">{sent.translation}</div>
+                          </div>
+                        </div>
+  
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addTextToNotebook([sent]);
+                          }}
+                          className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                        >
+                          加入
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-
+          </section>
+  
+          <div className="flex justify-center pb-10">
             <button
-              onClick={() => addVocabToNotebook([selectedVocab])}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-2"
+              onClick={handleSave}
+              disabled={isSaved}
+              className={`px-8 py-4 rounded-full font-bold flex items-center gap-2 transition-all shadow-lg ${
+                isSaved ? "bg-green-100 text-green-700" : "bg-gray-900 text-white hover:scale-105"
+              }`}
             >
-              加入单词本（自动去重）
+              {isSaved ? <CheckCircle size={20} /> : <Save size={20} />} {isSaved ? "已归档" : "完成并归档"}
             </button>
           </div>
         </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+  
+      {/* ✅ selectedVocab modal 必须放在最外层 div 内（但在 return 里面，且不挤进 course 分支） */}
+      {selectedVocab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setSelectedVocab(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+            >
+              <X size={20} />
+            </button>
+  
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-wider">
+                {selectedVocab.grammar_tag}
+              </div>
+  
+              <div className="text-5xl font-bold text-gray-900 mb-2">
+                <FuriganaText segments={selectedVocab.word} />
+              </div>
+  
+              <PlayButton text={selectedVocab.word} size="lg" />
+  
+              <p className="text-xl text-gray-600 font-medium">{selectedVocab.meaning}</p>
+  
+              <div className="w-full bg-gray-50 rounded-2xl p-6 mt-6 text-left">
+                <div className="text-xs text-gray-400 font-bold uppercase mb-3">例句</div>
+  
+                <div className="flex gap-3 items-start mb-2">
+                  <PlayButton text={selectedVocab.example.text} size="sm" />
+                  <FuriganaText segments={selectedVocab.example.text} className="text-lg font-medium text-gray-800" />
+                </div>
+  
+                <p className="text-sm text-gray-500 pl-9">{selectedVocab.example.translation}</p>
+  
+                {selectedVocab.example.grammar_point && (
+                  <div className="mt-4 pt-3 border-t border-gray-200/50">
+                    <div className="flex gap-2 items-center mb-1">
+                      <Brain size={14} className="text-pink-500" />
+                      <span className="text-xs font-bold text-gray-400 uppercase">语法深度解析</span>
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed pl-6">{selectedVocab.example.grammar_point}</p>
+                  </div>
+                )}
+              </div>
+  
+              <button
+                onClick={() => addVocabToNotebook([selectedVocab])}
+                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-2"
+              >
+                加入单词本（自动去重）
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
 
 const ReviewCenterView: React.FC<{ user: FirebaseUser | null }> = ({ user }) => {
   const [queue, setQueue] = useState<SRSItem[]>([]);
