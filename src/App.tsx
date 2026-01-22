@@ -1,3 +1,4 @@
+declare const __initial_auth_token: string | undefined;
 import React, { useState, useEffect, useRef, useMemo, useContext, createContext } from 'react';
 import {
   Settings, Book, Brain, GraduationCap, Play, Volume2, X, RefreshCw,
@@ -279,7 +280,8 @@ const parseToSegments = (str: string): FuriganaSegment[] => {
   let match;
   let hasMatch = false;
 
-  if (typeof str !== 'string') return str;
+  if (Array.isArray(str)) return str as any;
+  if (typeof str !== 'string') return [];
 
   while ((match = regex.exec(str)) !== null) {
     hasMatch = true;
@@ -568,9 +570,9 @@ class AIService {
   private static LEVEL_CONFIG = {
     N5: { vocab: 15, grammar: 3, dialogue: 8, essay: 10 },
     N4: { vocab: 20, grammar: 3, dialogue: 10, essay: 12 },
-    N3: { vocab: 30, grammar: 5, dialogue: 15, essay: 15 },
-    N2: { vocab: 40, grammar: 6, dialogue: 20, essay: 20 },
-    N1: { vocab: 50, grammar: 8, dialogue: 25, essay: 25 }
+    N3: { vocab: 25, grammar: 4, dialogue: 12, essay: 15 },
+    N2: { vocab: 30, grammar: 5, dialogue: 14, essay: 18 },
+    N1: { vocab: 35, grammar: 6, dialogue: 16, essay: 20 }
   };
 
   private static COURSE_PROMPT = `
@@ -801,6 +803,43 @@ JSON Structure:
 }
 `;
 
+  private static GEMINI_PART_PROMPT = `
+Role: Expert Japanese JLPT Instructor.
+You must output STRICT valid JSON only. No markdown. No extra text.
+Use SIMPLIFIED CHINESE only for meanings/explanations/translations.
+All Japanese text MUST be Furigana Segment format: {"text":"漢字","furigana":"かんじ"}.
+Target: [TOPIC], level: [LEVEL].
+
+Output size constraints:
+- Vocabulary items: EXACTLY [VOCAB_COUNT]
+- Grammar points: EXACTLY [GRAMMAR_COUNT]
+- Dialogue lines: EXACTLY [DIALOGUE_COUNT]
+- Essay sentences: EXACTLY [ESSAY_COUNT]
+
+SECTION: [SECTION]
+Return ONLY the JSON for this section according to the schema below.
+
+Schemas:
+1) SECTION=meta
+{ "topic":"[TOPIC]", "title":[FuriganaSegment...] }
+
+2) SECTION=vocabulary
+{ "vocabulary":[ { "id":"v1", "word":[...], "reading":"...", "meaning":"...", "grammar_tag":"...", "example":{ "text":[...], "translation":"...", "grammar_point":"..." } } ] }
+
+3) SECTION=grammar
+{ "grammar":[ { "id":"g1", "point":"...", "explanation":"...", "example":{ "text":[...], "translation":"..." } } ] }
+
+4) SECTION=dialogue
+{ "texts": { "dialogue":[ { "id":"d1", "role":"A", "name":"...", "text":[...], "translation":"..." } ] } }
+
+5) SECTION=essay
+{ "texts": { "essay": { "title":"...", "content":[ { "id":"e1", "text":[...], "translation":"..." } ] } } }
+
+CRITICAL:
+- Each SECTION must be internally complete and valid JSON.
+- Respect EXACT counts for the requested section.
+- Do NOT include other sections.
+`;
 
   private static DICT_PROMPT = `
 Explain word/phrase. Output JSON.
@@ -922,17 +961,21 @@ Structure:
         }
       })
     });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Gemini HTTP ${res.status}: ${txt.slice(0, 300)}`);
+    }
     const data = await res.json();
     if (data.error) throw new Error(`Gemini Error: ${data.error.message}`);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   };
 
   try {
-    return await doReq(60000);
+    return await doReq(40000);
   } catch (e: any) {
     // 典型：超过模型上限 / 输出策略限制 / 其他生成失败
-    console.warn("Gemini request failed at 60000, fallback to 40000:", e?.message || e);
-    return await doReq(40000);
+    console.warn("Gemini request failed at 40000, fallback to 20000:", e?.message || e);
+    return await doReq(20000);
   }
   }
 
@@ -975,8 +1018,8 @@ Structure:
 static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettings): Promise<CourseData> {
   const config = AIService.LEVEL_CONFIG[level];
 
-  const fill = (tpl: string) =>
-    tpl
+  const fill = (tpl: string, extra?: Record<string, string>) => {
+    let out = tpl
       .replace(/\[TOPIC\]/g, topic)
       .replace(/\[LEVEL\]/g, level)
       .replace(/\[VOCAB_COUNT\]/g, String(config.vocab))
@@ -984,18 +1027,48 @@ static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettin
       .replace(/\[DIALOGUE_COUNT\]/g, String(config.dialogue))
       .replace(/\[ESSAY_COUNT\]/g, String(config.essay));
 
-  const prompt =
-    settings.selectedModel === 'gemini'
-      ? fill(AIService.GEMINI_COURSE_PROMPT)
-      : fill(AIService.COURSE_PROMPT);
-
-  const json = await (
-    settings.selectedModel === 'gemini'
-      ? AIService.callGemini(prompt, settings)
-      : AIService.callOpenAI(prompt, settings)
-  );
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) {
+        out = out.replace(new RegExp(`\\[${k}\\]`, 'g'), v);
+      }
+    }
+    return out;
+  };
 
   const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
+
+  // ✅ Gemini：分段生成（更稳 + 12k 上限）
+  if (settings.selectedModel === 'gemini') {
+    const part = async (section: 'meta'|'vocabulary'|'grammar'|'dialogue'|'essay') => {
+      const prompt = fill(AIService.GEMINI_PART_PROMPT, { SECTION: section });
+      return await AIService.callGemini(prompt, settings);
+    };
+
+    // 串行最稳；你想更快可以把 grammar/dialogue/essay 并发，但先稳住再快
+    const meta = await part('meta');
+    const vocab = await part('vocabulary');
+    const gram = await part('grammar');
+    const dial = await part('dialogue');
+    const essay = await part('essay');
+
+    const merged: any = {
+      topic: meta.topic ?? topic,
+      title: meta.title ?? [{ text: topic }],
+      vocabulary: vocab.vocabulary ?? [],
+      grammar: gram.grammar ?? [],
+      texts: {
+        dialogue: dial.texts?.dialogue ?? [],
+        essay: essay.texts?.essay ?? { title: '', content: [] }
+      }
+    };
+
+    const course = { ...merged, id, createdAt: Date.now(), level };
+    return AIService.normalizeCourse(course as CourseData);
+  }
+
+  // ✅ OpenAI：保持一次生成（你原逻辑）
+  const prompt = fill(AIService.COURSE_PROMPT);
+  const json = await AIService.callOpenAI(prompt, settings);
   const course = { ...json, id, createdAt: Date.now(), level };
   return AIService.normalizeCourse(course);
 }
