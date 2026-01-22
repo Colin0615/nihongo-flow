@@ -587,6 +587,7 @@ class DBAdapter {
 }
 
 class NotebookAdapter {
+  // ----------- ADD VOCAB (dedup) -----------
   static async addVocabItems(
     user: FirebaseUser | null,
     groupId: string,
@@ -595,6 +596,7 @@ class NotebookAdapter {
   ) {
     const now = Date.now();
 
+    // 本地去重集合（仅针对本地 DB；云端靠稳定 id upsert）
     const localDB = LocalStorageManager.getDB();
     const existing = new Set<string>();
     for (const it of (localDB.notebookItems as NotebookItem[])) {
@@ -609,7 +611,10 @@ class NotebookAdapter {
 
       const id = makeNotebookId(groupId, 'vocab', dedupKey);
       toAdd.push({
-        id, groupId, courseId, type: 'vocab',
+        id,
+        groupId,
+        courseId,
+        type: 'vocab',
         dedupKey,
         content: v,
         createdAt: now,
@@ -620,12 +625,14 @@ class NotebookAdapter {
 
     if (!toAdd.length) return { added: 0, skipped: vocabList.length };
 
+    // 未登录：写本地
     if (!user || !db) {
       localDB.notebookItems.push(...toAdd);
       LocalStorageManager.saveDB(localDB);
       return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
     }
 
+    // 登录：写 Firestore（稳定 id，天然 upsert 去重）
     const batch = writeBatch(db);
     for (const item of toAdd) {
       const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
@@ -635,7 +642,7 @@ class NotebookAdapter {
     return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
   }
 
-  // ✅ 注意：deleteItem 在 addVocabItems 外面、同级
+  // ----------- DELETE ONE ITEM -----------
   static async deleteItem(user: FirebaseUser | null, itemId: string) {
     if (!user || !db) {
       const localDB = LocalStorageManager.getDB();
@@ -646,16 +653,22 @@ class NotebookAdapter {
     await deleteDoc(doc(db, 'users', user.uid, 'notebook_items', itemId));
   }
 
-  // 你其他方法（addGrammarItems / addTextItems / listGroups / getReviewQueue / updateSRS ...）
-}
-
-  static async addGrammarItems(user: FirebaseUser | null, groupId: string, courseId: string, grammarList: GrammarItem[]) {
+  // ----------- ADD GRAMMAR -----------
+  static async addGrammarItems(
+    user: FirebaseUser | null,
+    groupId: string,
+    courseId: string,
+    grammarList: GrammarItem[]
+  ) {
     const now = Date.now();
     const items: NotebookItem[] = grammarList.map((g) => {
       const rawKey = `${g.point}__${JSON.stringify(g.example?.text || [])}`;
       const id = makeNotebookId(groupId, 'grammar', rawKey);
       return {
-        id, groupId, courseId, type: 'grammar',
+        id,
+        groupId,
+        courseId,
+        type: 'grammar',
         content: g,
         createdAt: now,
         srs_level: 0,
@@ -673,21 +686,29 @@ class NotebookAdapter {
     const batch = writeBatch(db);
     for (const item of items) {
       const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
-      // grammar 不去重：但 id 若碰巧相同会 merge 覆盖；一般不会，因为 rawKey 很长
       batch.set(ref, item, { merge: false });
     }
     await batch.commit();
     return { added: items.length };
   }
 
-  static async addTextItems(user: FirebaseUser | null, groupId: string, courseId: string, textItems: TextItem[]) {
+  // ----------- ADD TEXT -----------
+  static async addTextItems(
+    user: FirebaseUser | null,
+    groupId: string,
+    courseId: string,
+    textItems: TextItem[]
+  ) {
     const now = Date.now();
     const items: NotebookItem[] = textItems.map((t) => {
       const surface = segmentsToSurface(t.text);
       const rawKey = `${surface}__${t.translation || ''}`;
       const id = makeNotebookId(groupId, 'text', rawKey);
       return {
-        id, groupId, courseId, type: 'text',
+        id,
+        groupId,
+        courseId,
+        type: 'text',
         content: t,
         createdAt: now,
         srs_level: 0,
@@ -711,7 +732,7 @@ class NotebookAdapter {
     return { added: items.length };
   }
 
-  // ----------- QUERY -----------
+  // ----------- GROUPS -----------
   static async listGroups(user: FirebaseUser | null): Promise<{ groupId: string; count: number }[]> {
     if (!user || !db) {
       const localDB = LocalStorageManager.getDB();
@@ -722,7 +743,6 @@ class NotebookAdapter {
       return Array.from(map.entries()).map(([groupId, count]) => ({ groupId, count }));
     }
 
-    // Firestore: 简化版（读全部再聚合）；后续可用聚合/索引优化
     const snap = await getDocs(collection(db, 'users', user.uid, 'notebook_items'));
     const map = new Map<string, number>();
     snap.forEach(d => {
@@ -732,6 +752,7 @@ class NotebookAdapter {
     return Array.from(map.entries()).map(([groupId, count]) => ({ groupId, count }));
   }
 
+  // ----------- REVIEW QUEUE (NotebookItem) -----------
   static async getReviewQueue(
     user: FirebaseUser | null,
     opts?: { type?: NotebookType; groupId?: string }
@@ -743,12 +764,10 @@ class NotebookAdapter {
       let items = (localDB.notebookItems as NotebookItem[]).filter(it => it.next_review <= now);
       if (opts?.type) items = items.filter(it => it.type === opts.type);
       if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
-      // 可按 next_review 排序
       items.sort((a, b) => a.next_review - b.next_review);
       return items;
     }
 
-    // Firestore：先按 next_review 拉，再本地过滤 type/groupId（最小实现）
     const q1 = query(collection(db, 'users', user.uid, 'notebook_items'), where("next_review", "<=", now));
     const snap = await getDocs(q1);
     let items: NotebookItem[] = [];
@@ -759,7 +778,7 @@ class NotebookAdapter {
     return items;
   }
 
-  // ----------- UPDATE SRS -----------
+  // ----------- UPDATE SRS (NotebookItem) -----------
   static async updateSRS(user: FirebaseUser | null, item: NotebookItem, quality: 'hard' | 'good' | 'easy') {
     const intervals = [0, 1, 3, 7, 14, 30];
     if (quality === 'hard') item.srs_level = Math.max(0, item.srs_level - 1);
@@ -780,6 +799,7 @@ class NotebookAdapter {
     await setDoc(doc(db, 'users', user.uid, 'notebook_items', item.id), item, { merge: true });
   }
 }
+
 
 
 // --- AI 服务 ---
