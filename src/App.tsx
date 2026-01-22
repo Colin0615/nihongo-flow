@@ -587,6 +587,31 @@ class DBAdapter {
 }
 
 class NotebookAdapter {
+    // ----------- LIST ALL (NotebookItem) -----------
+  static async listAllItems(
+    user: FirebaseUser | null,
+    opts?: { type?: NotebookType; groupId?: string }
+  ): Promise<NotebookItem[]> {
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      let items = (localDB.notebookItems as NotebookItem[]) || [];
+      if (opts?.type) items = items.filter(it => it.type === opts.type);
+      if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+      items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return items;
+    }
+
+    const snap = await getDocs(collection(db, 'users', user.uid, 'notebook_items'));
+    let items: NotebookItem[] = [];
+    snap.forEach(d => items.push(d.data() as NotebookItem));
+    if (opts?.type) items = items.filter(it => it.type === opts.type);
+    if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+    items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return items;
+  }
+
+  
+  
   // ----------- ADD VOCAB (dedup) -----------
   static async addVocabItems(
     user: FirebaseUser | null,
