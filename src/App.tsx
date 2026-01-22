@@ -132,7 +132,7 @@ interface CourseData {
   createdAt: number;
 }
 
- {
+interface SRSItem {
   id: string;
   type: 'vocab' | 'grammar';
   content: any;
@@ -972,7 +972,7 @@ Structure:
     return this.parseJSONSafe(data.choices?.[0]?.message?.content || '{}');
   }
 
-  static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettings): Promise<CourseData> {
+static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettings): Promise<CourseData> {
   const config = AIService.LEVEL_CONFIG[level];
 
   const fill = (tpl: string) =>
@@ -990,21 +990,15 @@ Structure:
       : fill(AIService.COURSE_PROMPT);
 
   const json = await (
-  settings.selectedModel === 'gemini'
-    ? AIService.callGemini(prompt, settings)
-    : AIService.callOpenAI(prompt, settings)
-);
+    settings.selectedModel === 'gemini'
+      ? AIService.callGemini(prompt, settings)
+      : AIService.callOpenAI(prompt, settings)
+  );
 
-const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
-const course = { ...json, id, createdAt: Date.now(), level };
-return AIService.normalizeCourse(course);
-
-  }
-
-    const json = settings.selectedModel === 'gemini' ? await AIService.callGemini(prompt, settings) : await AIService.callOpenAI(prompt, settings);
-    const course = { ...json, id: crypto.randomUUID(), createdAt: Date.now(), level };
-    return AIService.normalizeCourse(course);
-  }
+  const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
+  const course = { ...json, id, createdAt: Date.now(), level };
+  return AIService.normalizeCourse(course);
+}
 
   static async generateDictionary(query: string, settings: AppSettings): Promise<VocabItem> {
     const prompt = AIService.DICT_PROMPT + `\nWORD: ${query}`;
