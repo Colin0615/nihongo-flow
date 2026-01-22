@@ -132,7 +132,7 @@ interface CourseData {
   createdAt: number;
 }
 
-interface SRSItem {
+ {
   id: string;
   type: 'vocab' | 'grammar';
   content: any;
@@ -574,88 +574,233 @@ class AIService {
   };
 
   private static COURSE_PROMPT = `
-ADDITIONAL CONSTRAINTS AND QUALITY RULES (MUST FOLLOW):
+You are a professional Japanese JLPT instructor.
 
-1) Output MUST be strict valid JSON (RFC 8259). Do NOT include comments, markdown, or any extra text.
-2) Do NOT omit, rename, or restructure any field defined in the JSON Structure.
-3) All array items MUST include a stable "id" field (string, e.g. "vocab_001", "grammar_001", "dlg_001").
-4) All Japanese text MUST strictly follow the Furigana Segment format:
-   {"text":"漢字","furigana":"かんじ"}.
-   Kana-only words must still use this structure.
-5) Use SIMPLIFIED CHINESE ONLY for all meanings, explanations, translations, and grammar analysis.
-6) grammar_tag MUST be one of the following values ONLY:
-   noun, verb, adjective-i, adjective-na, particle, expression.
-7) In example.grammar_point, explanations MUST be concise teaching-oriented sentences separated by "；",
-   and must clearly explain verb forms, particles, or sentence structure.
-8) Ensure all vocabulary, grammar points, dialogues, and texts are directly relevant to the given topic.
-9) TARGET LEVEL INSTRUCTION:
-   [LEVEL_INSTRUCTION]
-10) If any content is uncertain, output null instead of guessing.
-11) Ensure internal consistency: furigana must correctly match the kanji; translations must match the Japanese meaning.
-12) REQUIRED ITEM COUNTS:
-   - Vocabulary: [VOCAB_COUNT] items
-   - Grammar: [GRAMMAR_COUNT] items
-   - Dialogue: [DIALOGUE_COUNT] lines
-   - Essay: [ESSAY_COUNT] sentences
-13) CRITICAL: Escape all double quotes within strings with backslash.
+Task:
+Create a complete, pedagogically sound Japanese learning session about [TOPIC],
+strictly following target JLPT level: [LEVEL].
 
-JSON Structure:
+==================================================
+LEVEL CONTROL (CUMULATIVE, MANDATORY)
+==================================================
+- Higher levels INCLUDE all lower-level abilities and ADD new ones.
+- Do NOT exclude lower-level grammar/vocab at higher levels.
+- Do NOT introduce grammar above [LEVEL].
+- If uncertain, prefer simpler structures, NOT fewer examples.
+
+==================================================
+PER-LEVEL DIFFICULTY CONSTRAINTS (STRICT)
+==================================================
+
+N5:
+- Short, clear sentences.
+- Core particles: は・が・を・に・で・の
+- です/ます basics, adjective-i/na basics
+- Avoid: relative clauses, dense compound sentences, abstract opinions.
+
+N4:
+- Includes all N5, plus: て-form, から/けど, basic comparisons, preferences
+- Avoid: honorific/humble, heavy clause stacking
+
+N3:
+- Includes all N4, plus: casual form, basic conditionals (〜たら/〜と), common set phrases
+- Avoid: literary/academic style
+
+N2:
+- Includes all N3, plus: formal written expressions, business-leaning patterns
+- Avoid: rare/archaic idioms
+
+N1:
+- Includes all previous levels; nuanced written/spoken style, idioms where appropriate
+
+==================================================
+OUTPUT SIZE (MUST FOLLOW EXACTLY)
+==================================================
+- Vocabulary items: EXACTLY [VOCAB_COUNT]
+- Grammar points: EXACTLY [GRAMMAR_COUNT]
+- Dialogue lines: EXACTLY [DIALOGUE_COUNT]
+- Essay sentences: EXACTLY [ESSAY_COUNT]
+
+==================================================
+CONTENT DIVERSITY (CRITICAL: SOLVE SIMILARITY)
+==================================================
+Dialogue and Essay MUST be meaningfully different:
+1) Dialogue = spoken, turn-based, situational interaction.
+2) Essay = written narrative/explanation. NOT a paraphrase of the dialogue.
+
+Hard anti-similarity rules:
+- Do NOT reuse the same event sequence in both.
+- Do NOT reuse the same sentence skeletons (same particle order + same verb ending) across sections.
+- If a grammar point appears in Dialogue, its Essay usage MUST differ structurally.
+- Lexical repetition is allowed (reinforcement), but structure and scenario must diverge.
+
+==================================================
+OUTPUT REQUIREMENTS (STRICT)
+==================================================
+- Output MUST be strict valid JSON only. No markdown, no commentary.
+- Use SIMPLIFIED CHINESE ONLY for explanations/translations.
+- All Japanese text MUST use Furigana Segment format:
+  {"text":"漢字","furigana":"かんじ"}
+
+==================================================
+JSON STRUCTURE
+==================================================
 {
-  "topic": "Topic Name (Japanese)",
+  "topic": "[TOPIC]",
   "title": [FuriganaSegment...],
-  "vocabulary": [ // [VOCAB_COUNT] items
+  "vocabulary": [
     {
-      "id": "v1", "word": [...], "reading": "hiragana", "meaning": "chinese", "grammar_tag": "noun",
-      "example": { "text": [...], "translation": "chinese", "grammar_point": "Detailed chinese grammar analysis (verb forms, particles)" }
+      "id": "v1",
+      "word": [...],
+      "reading": "hiragana",
+      "meaning": "chinese",
+      "grammar_tag": "noun | verb | adjective-i | adjective-na | particle | expression",
+      "example": {
+        "text": [...],
+        "translation": "chinese",
+        "grammar_point": "concise chinese explanation"
+      }
     }
   ],
-  "grammar": [ // [GRAMMAR_COUNT] items
-    { "id": "g1", "point": "...", "explanation": "chinese", "example": { "text": [...], "translation": "chinese" } }
+  "grammar": [
+    {
+      "id": "g1",
+      "point": "...",
+      "explanation": "chinese",
+      "example": {
+        "text": [...],
+        "translation": "chinese"
+      }
+    }
   ],
   "texts": {
-    "dialogue": [ // [DIALOGUE_COUNT] lines
-      { "id": "d1", "role": "A", "name": "...", "text": [...], "translation": "chinese" }
+    "dialogue": [
+      {
+        "id": "d1",
+        "role": "A",
+        "name": "...",
+        "text": [...],
+        "translation": "chinese"
+      }
     ],
     "essay": {
       "title": "...",
-      "content": [ // [ESSAY_COUNT] sentences
-        { "id": "e1", "text": [...], "translation": "chinese" }
+      "content": [
+        {
+          "id": "e1",
+          "text": [...],
+          "translation": "chinese"
+        }
       ]
     }
   }
 }
 `;
 
+
   // 2. Gemini 增强 Prompt (修复语法例句缺失问题)
   private static GEMINI_COURSE_PROMPT = `
-Role: Expert Japanese JLPT [LEVEL] Instructor.
-Task: Create a deep, high-quality, EXTENSIVE study session about: [TOPIC].
+Role: Expert Japanese JLPT Instructor.
+Task: Create a high-quality learning session about [TOPIC], target level: [LEVEL].
 
-INSTRUCTIONS:
-1. **Depth**: Do not be brief. Use the large token window to provide detailed explanations for every grammar point and vocabulary nuance.
-2. **Vocabulary**: Select [VOCAB_COUNT] items. For each, 'grammar_point' MUST explain usage, nuance, or connection rules in detail (Simplified Chinese).
-3. **Grammar**: Select [GRAMMAR_COUNT] points. Explain connection rules (e.g., Verb-Te + ...) clearly. 
-   CRITICAL: Grammar examples must include Japanese text segments.
-4. **Dialogue**: Create a [DIALOGUE_COUNT] line natural conversation using the target vocab/grammar.
-5. **Essay**: Write a [ESSAY_COUNT] sentence reading passage.
+==================================================
+LEVEL CONTROL (CUMULATIVE, STRICT)
+==================================================
+- Higher levels INCLUDE all lower-level abilities and ADD new ones.
+- Do NOT exclude lower-level grammar/vocab.
+- Do NOT introduce grammar above [LEVEL].
+- If unsure, choose simpler structure, not less content.
 
-Output strictly valid JSON (RFC 8259). No markdown.
-Structure:
+==================================================
+OUTPUT SIZE (MUST FOLLOW EXACTLY)
+==================================================
+- Vocabulary items: EXACTLY [VOCAB_COUNT]
+- Grammar points: EXACTLY [GRAMMAR_COUNT]
+- Dialogue lines: EXACTLY [DIALOGUE_COUNT]
+- Essay sentences: EXACTLY [ESSAY_COUNT]
+
+==================================================
+CONTENT DIVERSITY (CRITICAL: SOLVE SIMILARITY)
+==================================================
+Dialogue and Essay MUST be meaningfully different:
+1) Dialogue: spoken, turn-based, situational interaction.
+2) Essay: written narrative/explanation. NOT a paraphrase of dialogue.
+
+Hard anti-similarity rules:
+- Do NOT reuse the same event sequence in both.
+- Do NOT reuse the same sentence skeletons across sections.
+- If a grammar point appears in Dialogue, Essay usage MUST differ structurally.
+- Lexical repetition is allowed; do NOT force artificial synonym swapping.
+
+==================================================
+ANTI-SHRINK SAFETY (DON'T LOSE CONTENT)
+==================================================
+Within the allowed difficulty range:
+- Keep content rich and varied.
+- Prefer multiple short sentences over long compound ones.
+- Do NOT reduce quantity due to level constraints.
+
+==================================================
+OUTPUT FORMAT (STRICT)
+==================================================
+Output MUST be strict valid JSON (RFC 8259).
+NO markdown. NO extra text.
+Use SIMPLIFIED CHINESE only for meanings/explanations/translations.
+All Japanese text MUST be Furigana Segment format: {"text":"漢字","furigana":"かんじ"}
+
+JSON Structure:
 {
-  "topic": "...",
-  "title": [{"text":"...","furigana":"..."}],
+  "topic": "[TOPIC]",
+  "title": [FuriganaSegment...],
   "vocabulary": [
-    { "id": "v1", "word": [{"text":"...","furigana":"..."}], "reading": "...", "meaning": "...", "grammar_tag": "...", "example": { "text": [{"text":"...","furigana":"..."}], "translation": "...", "grammar_point": "..." } }
+    {
+      "id": "v1",
+      "word": [...],
+      "reading": "hiragana",
+      "meaning": "chinese",
+      "grammar_tag": "noun | verb | adjective-i | adjective-na | particle | expression",
+      "example": {
+        "text": [...],
+        "translation": "chinese",
+        "grammar_point": "concise chinese grammar explanation"
+      }
+    }
   ],
   "grammar": [
-    { "id": "g1", "point": "...", "explanation": "...", "example": { "text": [{"text":"例","furigana":"れい"}], "translation": "..." } }
+    {
+      "id": "g1",
+      "point": "...",
+      "explanation": "chinese",
+      "example": {
+        "text": [...],
+        "translation": "chinese"
+      }
+    }
   ],
   "texts": {
-    "dialogue": [ { "id": "d1", "role": "A", "name": "...", "text": [...], "translation": "..." } ],
-    "essay": { "title": "...", "content": [ { "id": "e1", "text": [...], "translation": "..." } ] }
+    "dialogue": [
+      {
+        "id": "d1",
+        "role": "A",
+        "name": "...",
+        "text": [...],
+        "translation": "chinese"
+      }
+    ],
+    "essay": {
+      "title": "...",
+      "content": [
+        {
+          "id": "e1",
+          "text": [...],
+          "translation": "chinese"
+        }
+      ]
+    }
   }
 }
 `;
+
 
   private static DICT_PROMPT = `
 Explain word/phrase. Output JSON.
@@ -758,27 +903,37 @@ Structure:
 
 
   private static async requestGemini(prompt: string, settings: AppSettings, imageData?: string): Promise<string> {
-    if (!settings.geminiKey) throw new Error("缺少 Gemini Key");
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${settings.geminiKey}`;
-    const parts: any[] = [{ text: prompt }];
-    if (imageData) parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
+  if (!settings.geminiKey) throw new Error("缺少 Gemini Key");
 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${settings.geminiKey}`;
+  const parts: any[] = [{ text: prompt }];
+  if (imageData) parts.push({ inlineData: { mimeType: "image/jpeg", data: imageData } });
+
+  const doReq = async (maxOutputTokens: number) => {
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts }],
-        generationConfig: { 
-          maxOutputTokens: 40000, 
+        generationConfig: {
+          maxOutputTokens,
           temperature: 0.7,
-          responseMimeType: "application/json" 
+          responseMimeType: "application/json"
         }
       })
     });
-
     const data = await res.json();
     if (data.error) throw new Error(`Gemini Error: ${data.error.message}`);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  };
+
+  try {
+    return await doReq(60000);
+  } catch (e: any) {
+    // 典型：超过模型上限 / 输出策略限制 / 其他生成失败
+    console.warn("Gemini request failed at 60000, fallback to 40000:", e?.message || e);
+    return await doReq(40000);
+  }
   }
 
   static async callGemini(prompt: string, settings: AppSettings, imageData?: string): Promise<any> {
@@ -818,28 +973,30 @@ Structure:
   }
 
   static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettings): Promise<CourseData> {
-    const config = AIService.LEVEL_CONFIG[level];
-    const levelInstruction = `Target Level: JLPT ${level}. Use vocabulary and grammar suitable for ${level}.`;
+  const config = AIService.LEVEL_CONFIG[level];
 
-    let prompt = "";
-    // 分流处理 Prompt
-    if (settings.selectedModel === 'gemini') {
-        prompt = AIService.GEMINI_COURSE_PROMPT
-          .replace('[TOPIC]', topic)
-          .replace('[LEVEL_INSTRUCTION]', levelInstruction)
-          .replace(/\[VOCAB_COUNT\]/g, config.vocab.toString())
-          .replace(/\[GRAMMAR_COUNT\]/g, config.grammar.toString())
-          .replace(/\[DIALOGUE_COUNT\]/g, config.dialogue.toString())
-          .replace(/\[ESSAY_COUNT\]/g, config.essay.toString());
-    } else {
-        prompt = AIService.COURSE_PROMPT
-          .replace('[LEVEL_INSTRUCTION]', levelInstruction)
-          .replace(/\[VOCAB_COUNT\]/g, config.vocab.toString())
-          .replace(/\[GRAMMAR_COUNT\]/g, config.grammar.toString())
-          .replace(/\[DIALOGUE_COUNT\]/g, config.dialogue.toString())
-          .replace(/\[ESSAY_COUNT\]/g, config.essay.toString())
-          + `\nTopic: ${topic}`;
-    }
+  const fill = (tpl: string) =>
+    tpl
+      .replace(/\[TOPIC\]/g, topic)
+      .replace(/\[LEVEL\]/g, level)
+      .replace(/\[VOCAB_COUNT\]/g, String(config.vocab))
+      .replace(/\[GRAMMAR_COUNT\]/g, String(config.grammar))
+      .replace(/\[DIALOGUE_COUNT\]/g, String(config.dialogue))
+      .replace(/\[ESSAY_COUNT\]/g, String(config.essay));
+
+  const prompt =
+    settings.selectedModel === 'gemini'
+      ? fill(AIService.GEMINI_COURSE_PROMPT)
+      : fill(AIService.COURSE_PROMPT);
+
+  const json =
+    settings.selectedModel === 'gemini'
+      ? await AIService.callGemini(prompt, settings)
+      : await AIService.callOpenAI(prompt, settings);
+
+  const course = { ...json, id: crypto.randomUUID(), createdAt: Date.now(), level };
+  return AIService.normalizeCourse(course);
+  }
 
     const json = settings.selectedModel === 'gemini' ? await AIService.callGemini(prompt, settings) : await AIService.callOpenAI(prompt, settings);
     const course = { ...json, id: crypto.randomUUID(), createdAt: Date.now(), level };
