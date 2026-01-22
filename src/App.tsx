@@ -121,6 +121,7 @@ interface TextItem {
 
 interface CourseData {
   id: string;
+  groupId: string; // ✅ 新增：课程组ID（topic+level）
   topic: string;
   level: JLPTLevel;
   title: FuriganaSegment[];
@@ -141,6 +142,19 @@ interface SRSItem {
   next_review: number;
 }
 
+type NotebookType = 'vocab' | 'grammar' | 'text';
+
+interface NotebookItem {
+  id: string;              // 稳定ID，vocab去重靠它
+  groupId: string;         // 课程组
+  courseId?: string;       // 来源课程实例（可选）
+  type: NotebookType;
+  dedupKey?: string;       // 仅 vocab 使用
+  content: any;            // vocab/grammar/text原对象
+  createdAt: number;
+  srs_level: number;
+  next_review: number;
+}
 // ==========================================
 // 2. 高级音频服务 (TTSService)
 // ==========================================
@@ -469,8 +483,16 @@ class LocalStorageManager {
   static saveSettings(s: AppSettings) { localStorage.setItem('nihongo_app_settings', JSON.stringify(s)); }
 
   static getDB() {
-    try { return JSON.parse(localStorage.getItem('nihongo_app_db') || '{"courses":[], "srsItems":[]}'); }
-    catch { return { courses: [], srsItems: [] }; }
+    try {
+      const raw = JSON.parse(localStorage.getItem('nihongo_app_db') || '{}');
+      return {
+        courses: Array.isArray(raw.courses) ? raw.courses : [],
+        srsItems: Array.isArray(raw.srsItems) ? raw.srsItems : [],
+        notebookItems: Array.isArray(raw.notebookItems) ? raw.notebookItems : [] // ✅ 新增
+      };
+    } catch {
+      return { courses: [], srsItems: [], notebookItems: [] };
+    }
   }
   static saveDB(db: any) { localStorage.setItem('nihongo_app_db', JSON.stringify(db)); }
 }
@@ -565,7 +587,228 @@ class DBAdapter {
   }
 }
 
+class NotebookAdapter {
+  // ----------- ADD -----------
+  static async addVocabItems(user: FirebaseUser | null, groupId: string, courseId: string, vocabList: VocabItem[]) {
+    const now = Date.now();
+
+    // 本地去重集合
+    const localDB = LocalStorageManager.getDB();
+    const existing = new Set<string>();
+    for (const it of (localDB.notebookItems as NotebookItem[])) {
+      if (it.type === 'vocab' && it.groupId === groupId && it.dedupKey) existing.add(it.dedupKey);
+    }
+
+    const toAdd: NotebookItem[] = [];
+    for (const v of vocabList) {
+      const dedupKey = makeVocabDedupKey(v);
+      if (existing.has(dedupKey)) continue; // ✅ 去重
+      existing.add(dedupKey);
+
+      const id = makeNotebookId(groupId, 'vocab', dedupKey);
+      toAdd.push({
+        id, groupId, courseId, type: 'vocab',
+        dedupKey,
+        content: v,
+        createdAt: now,
+        srs_level: 0,
+        next_review: now
+      });
+    }
+
+    if (!toAdd.length) return { added: 0, skipped: vocabList.length };
+
+    // 未登录：写本地
+    if (!user || !db) {
+      localDB.notebookItems.push(...toAdd);
+      LocalStorageManager.saveDB(localDB);
+      return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
+    }
+
+    // 登录：写 Firestore（使用稳定 id，天然 upsert 去重）
+    const batch = writeBatch(db);
+    for (const item of toAdd) {
+      const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
+      batch.set(ref, item, { merge: true });
+    }
+    await batch.commit();
+    return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
+  }
+
+  static async addGrammarItems(user: FirebaseUser | null, groupId: string, courseId: string, grammarList: GrammarItem[]) {
+    const now = Date.now();
+    const items: NotebookItem[] = grammarList.map((g) => {
+      const rawKey = `${g.point}__${JSON.stringify(g.example?.text || [])}`;
+      const id = makeNotebookId(groupId, 'grammar', rawKey);
+      return {
+        id, groupId, courseId, type: 'grammar',
+        content: g,
+        createdAt: now,
+        srs_level: 0,
+        next_review: now
+      };
+    });
+
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      localDB.notebookItems.push(...items);
+      LocalStorageManager.saveDB(localDB);
+      return { added: items.length };
+    }
+
+    const batch = writeBatch(db);
+    for (const item of items) {
+      const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
+      // grammar 不去重：但 id 若碰巧相同会 merge 覆盖；一般不会，因为 rawKey 很长
+      batch.set(ref, item, { merge: false });
+    }
+    await batch.commit();
+    return { added: items.length };
+  }
+
+  static async addTextItems(user: FirebaseUser | null, groupId: string, courseId: string, textItems: TextItem[]) {
+    const now = Date.now();
+    const items: NotebookItem[] = textItems.map((t) => {
+      const surface = segmentsToSurface(t.text);
+      const rawKey = `${surface}__${t.translation || ''}`;
+      const id = makeNotebookId(groupId, 'text', rawKey);
+      return {
+        id, groupId, courseId, type: 'text',
+        content: t,
+        createdAt: now,
+        srs_level: 0,
+        next_review: now
+      };
+    });
+
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      localDB.notebookItems.push(...items);
+      LocalStorageManager.saveDB(localDB);
+      return { added: items.length };
+    }
+
+    const batch = writeBatch(db);
+    for (const item of items) {
+      const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
+      batch.set(ref, item, { merge: false });
+    }
+    await batch.commit();
+    return { added: items.length };
+  }
+
+  // ----------- QUERY -----------
+  static async listGroups(user: FirebaseUser | null): Promise<{ groupId: string; count: number }[]> {
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      const map = new Map<string, number>();
+      for (const it of (localDB.notebookItems as NotebookItem[])) {
+        map.set(it.groupId, (map.get(it.groupId) || 0) + 1);
+      }
+      return Array.from(map.entries()).map(([groupId, count]) => ({ groupId, count }));
+    }
+
+    // Firestore: 简化版（读全部再聚合）；后续可用聚合/索引优化
+    const snap = await getDocs(collection(db, 'users', user.uid, 'notebook_items'));
+    const map = new Map<string, number>();
+    snap.forEach(d => {
+      const it = d.data() as NotebookItem;
+      map.set(it.groupId, (map.get(it.groupId) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([groupId, count]) => ({ groupId, count }));
+  }
+
+  static async getReviewQueue(
+    user: FirebaseUser | null,
+    opts?: { type?: NotebookType; groupId?: string }
+  ): Promise<NotebookItem[]> {
+    const now = Date.now();
+
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      let items = (localDB.notebookItems as NotebookItem[]).filter(it => it.next_review <= now);
+      if (opts?.type) items = items.filter(it => it.type === opts.type);
+      if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+      // 可按 next_review 排序
+      items.sort((a, b) => a.next_review - b.next_review);
+      return items;
+    }
+
+    // Firestore：先按 next_review 拉，再本地过滤 type/groupId（最小实现）
+    const q1 = query(collection(db, 'users', user.uid, 'notebook_items'), where("next_review", "<=", now));
+    const snap = await getDocs(q1);
+    let items: NotebookItem[] = [];
+    snap.forEach(d => items.push(d.data() as NotebookItem));
+    if (opts?.type) items = items.filter(it => it.type === opts.type);
+    if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+    items.sort((a, b) => a.next_review - b.next_review);
+    return items;
+  }
+
+  // ----------- UPDATE SRS -----------
+  static async updateSRS(user: FirebaseUser | null, item: NotebookItem, quality: 'hard' | 'good' | 'easy') {
+    const intervals = [0, 1, 3, 7, 14, 30];
+    if (quality === 'hard') item.srs_level = Math.max(0, item.srs_level - 1);
+    else if (quality === 'good') item.srs_level = Math.min(5, item.srs_level + 1);
+    else if (quality === 'easy') item.srs_level = Math.min(5, item.srs_level + 2);
+    item.next_review = Date.now() + (intervals[item.srs_level] * 86400000);
+
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      const idx = (localDB.notebookItems as NotebookItem[]).findIndex(i => i.id === item.id);
+      if (idx !== -1) {
+        localDB.notebookItems[idx] = item;
+        LocalStorageManager.saveDB(localDB);
+      }
+      return;
+    }
+
+    await setDoc(doc(db, 'users', user.uid, 'notebook_items', item.id), item, { merge: true });
+  }
+}
+
+
 // --- AI 服务 ---
+const normalizeTopic = (s: string) =>
+  (s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ''); // 去标点（unicode）
+
+const makeGroupId = (topic: string, level: JLPTLevel) => {
+  const t = normalizeTopic(topic);
+  // groupId 需要“可读且稳定”
+  return `${t}__${level}`;
+};
+
+const segmentsToSurface = (segs: FuriganaSegment[]) =>
+  Array.isArray(segs) ? segs.map(s => s.text || '').join('') : '';
+
+const segmentsToKanaForDedup = (segs: FuriganaSegment[]) =>
+  Array.isArray(segs) ? segs.map(s => (s.furigana || s.text || '')).join('') : '';
+
+const makeVocabDedupKey = (v: VocabItem) => {
+  const surface = segmentsToSurface(v.word).trim();
+  // reading 有时不稳，这里用 kana 拼接更稳（有furigana就用furigana）
+  const kana = segmentsToKanaForDedup(v.word).trim();
+  return `${surface}__${kana}`.toLowerCase();
+};
+
+// 轻量 hash，用于生成稳定 itemId（不依赖外部库）
+const hashString = (input: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+};
+
+const makeNotebookId = (groupId: string, type: NotebookType, dedupKeyOrRaw: string) => {
+  return `${type}-${hashString(`${groupId}::${type}::${dedupKeyOrRaw}`)}`;
+};
+
 class AIService {
   private static LEVEL_CONFIG = {
     N5: { vocab: 15, grammar: 3, dialogue: 8, essay: 10 },
@@ -1061,15 +1304,16 @@ static async generateCourse(topic: string, level: JLPTLevel, settings: AppSettin
         essay: essay.texts?.essay ?? { title: '', content: [] }
       }
     };
-
-    const course = { ...merged, id, createdAt: Date.now(), level };
+    const groupId = makeGroupId(topic, level);
+    const course = { ...merged, id, groupId, createdAt: Date.now(), level };
     return AIService.normalizeCourse(course as CourseData);
   }
 
   // ✅ OpenAI：保持一次生成（你原逻辑）
   const prompt = fill(AIService.COURSE_PROMPT);
   const json = await AIService.callOpenAI(prompt, settings);
-  const course = { ...json, id, createdAt: Date.now(), level };
+  const groupId = makeGroupId(topic, level);
+  const course = { ...json, id, groupId, createdAt: Date.now(), level };
   return AIService.normalizeCourse(course);
 }
 
@@ -1279,6 +1523,7 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
   const [level, setLevel] = useState<JLPTLevel>('N5');
   const [selectedVocab, setSelectedVocab] = useState<VocabItem | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [notebookMsg, setNotebookMsg] = useState<string>(""); // ✅ 生词本提示
 
   const handleGenerate = async () => {
     if (!topic) return;
@@ -1294,8 +1539,44 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
     if (course) { await DBAdapter.archiveCourse(user, course); setIsSaved(true); }
   };
 
+    const ensureCourse = () => {
+    if (!course) throw new Error("课程为空");
+    if (!course.groupId) throw new Error("缺少 groupId（请确认 generateCourse 已写入 groupId）");
+    return course;
+  };
+
+  // ✅ 1) 添加单词：支持单个/批量
+  const addVocabToNotebook = async (items: VocabItem[]) => {
+    const c = ensureCourse();
+    const res = await NotebookAdapter.addVocabItems(user, c.groupId, c.id, items);
+    setNotebookMsg(`单词本：新增 ${res.added}，跳过重复 ${res.skipped}`);
+    setTimeout(() => setNotebookMsg(""), 2500);
+  };
+
+  // ✅ 2) 添加语法：支持单个/批量（不去重）
+  const addGrammarToNotebook = async (items: GrammarItem[]) => {
+    const c = ensureCourse();
+    const res = await NotebookAdapter.addGrammarItems(user, c.groupId, c.id, items);
+    setNotebookMsg(`语法本：已添加 ${res.added}`);
+    setTimeout(() => setNotebookMsg(""), 2500);
+  };
+
+  // ✅ 3) 添加课文句子：支持单个/批量（不去重）
+  const addTextToNotebook = async (items: TextItem[]) => {
+    const c = ensureCourse();
+    const res = await NotebookAdapter.addTextItems(user, c.groupId, c.id, items);
+    setNotebookMsg(`课文本：已添加 ${res.added}`);
+    setTimeout(() => setNotebookMsg(""), 2500);
+  };
+
+  
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
+            {notebookMsg && (
+              <div className="max-w-xl mx-auto text-center text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2 rounded-xl">
+                {notebookMsg}
+              </div>
+            )}
       <div className="text-center space-y-6 pt-10">
         <h2 className="text-3xl font-bold text-gray-900">今天想学什么？</h2>
         <div className="flex flex-col gap-4 max-w-xl mx-auto">
@@ -1317,7 +1598,17 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700">
           <div className="text-center border-b border-gray-200 pb-6"><span className="text-xs font-bold text-indigo-600 tracking-widest uppercase">AI 课程 ({level})</span><div className="text-4xl font-bold text-gray-900 mt-2 mb-2 flex justify-center gap-3"><FuriganaText segments={course.title} /><PlayButton text={course.title} size="lg" /></div><p className="text-gray-500">{course.topic}</p></div>
           <section>
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><div className="w-1 h-6 bg-indigo-500 rounded-full" /> 核心词汇</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <div className="w-1 h-6 bg-indigo-500 rounded-full" /> 核心词汇
+              </h3>
+              <button
+                onClick={() => addVocabToNotebook(course.vocabulary)}
+                className="text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-2 rounded-full hover:bg-indigo-100"
+              >
+                整表加入单词本
+              </button>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {course.vocabulary.map((vocab: any, i: number) => (
                 <button key={i} onClick={() => setSelectedVocab(vocab)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all text-left group">
@@ -1329,12 +1620,39 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
           </section>
           
           <section>
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><div className="w-1 h-6 bg-pink-500 rounded-full"/> 关键语法</h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <div className="w-1 h-6 bg-pink-500 rounded-full"/> 关键语法
+              </h3>
+              <button
+                onClick={() => addGrammarToNotebook(course.grammar)}
+                className="text-xs font-bold bg-pink-50 text-pink-700 px-3 py-2 rounded-full hover:bg-pink-100"
+              >
+                整段加入语法本
+              </button>
+            </div>
             <div className="space-y-4">
               {course.grammar.map((g: any, i: number) => (
                 <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="font-bold text-lg text-indigo-600 mb-2">{g.point}</div><p className="text-sm text-gray-600 mb-4">{g.explanation}</p>
-                  <div className="bg-gray-50 p-3 rounded-xl flex gap-3 items-start"><PlayButton text={g.example.text} size="sm"/><div><FuriganaText segments={g.example.text} className="text-gray-800 font-medium"/><div className="text-xs text-gray-400 mt-1">{g.example.translation}</div></div></div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-bold text-lg text-indigo-600">{g.point}</div>
+                    <button
+                      onClick={() => addGrammarToNotebook([g])}
+                      className="text-xs font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200"
+                    >
+                      加入语法本
+                    </button>
+                  </div>
+              
+                  <p className="text-sm text-gray-600 mb-4">{g.explanation}</p>
+              
+                  <div className="bg-gray-50 p-3 rounded-xl flex gap-3 items-start">
+                    <PlayButton text={g.example.text} size="sm" />
+                    <div>
+                      <FuriganaText segments={g.example.text} className="text-gray-800 font-medium" />
+                      <div className="text-xs text-gray-400 mt-1">{g.example.translation}</div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1344,20 +1662,69 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><div className="w-1 h-6 bg-emerald-500 rounded-full" /> 对话与短文</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                <h4 className="font-bold text-gray-400 text-xs uppercase mb-4">场景对话</h4>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-gray-400 text-xs uppercase">场景对话</h4>
+                  <button
+                    onClick={() => addTextToNotebook(course.texts.dialogue)}
+                    className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
+                  >
+                    对话全加入课文本
+                  </button>
+                </div>
                 {course.texts.dialogue.map((line: any, i: number) => (
                   <div key={i} className="flex gap-3">
                     <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">{line.role}</div>
-                    <div><div className="flex items-center gap-2"><PlayButton text={line.text} size="sm" /><FuriganaText segments={line.text} className="text-lg font-medium" /></div><p className="text-sm text-gray-400 pl-8">{line.translation}</p></div>
-                  </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <PlayButton text={line.text} size="sm" />
+                          <FuriganaText segments={line.text} className="text-lg font-medium" />
+                        </div>
+                        <p className="text-sm text-gray-400 pl-8">{line.translation}</p>
+                      </div>
+                    
+                      <button
+                        onClick={() => addTextToNotebook([line])}
+                        className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                      >
+                        加入
+                      </button>
+                    </div>
                 ))}
               </div>
               <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-                <div className="flex justify-between items-center mb-4"><h4 className="font-bold text-gray-400 text-xs uppercase">{course.texts.essay.title}</h4><EssayPlayer segments={course.texts.essay.content} /></div>
+                <div className="flex justify-between items-center mb-4 gap-2">
+                    <h4 className="font-bold text-gray-400 text-xs uppercase">{course.texts.essay.title}</h4>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => addTextToNotebook(course.texts.essay.content)}
+                        className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
+                      >
+                        短文全加入课文本
+                      </button>
+                      <EssayPlayer segments={course.texts.essay.content} />
+                    </div>
+                  </div>
                 <div className="space-y-6">
                   {course.texts.essay.content.map((sent: any, i: number) => (
                     <div key={i} className="group cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors">
-                      <div className="flex gap-3 items-start"><PlayButton text={sent.text} size="sm" /><div><FuriganaText segments={sent.text} className="text-lg text-gray-800 leading-8" /><div className="text-sm text-gray-500 mt-1 border-t border-gray-100 pt-1">{sent.translation}</div></div></div>
+                      <div className="flex gap-3 items-start justify-between">
+                        <div className="flex gap-3 items-start">
+                          <PlayButton text={sent.text} size="sm" />
+                          <div>
+                            <FuriganaText segments={sent.text} className="text-lg text-gray-800 leading-8" />
+                            <div className="text-sm text-gray-500 mt-1 border-t border-gray-100 pt-1">{sent.translation}</div>
+                          </div>
+                        </div>
+                      
+                        <button
+                          onClick={(e) => { e.stopPropagation(); addTextToNotebook([sent]); }}
+                          className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                        >
+                          加入
+                        </button>
+                      </div>
+
                     </div>
                   ))}
                 </div>
@@ -1387,6 +1754,12 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
         </div>
       )}
     </div>
+    <button
+      onClick={() => addVocabToNotebook([selectedVocab])}
+      className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-4"
+    >
+      加入单词本（自动去重）
+    </button>
   );
 };
 
