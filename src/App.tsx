@@ -14,7 +14,7 @@ import {
 import type { User as FirebaseUser } from 'firebase/auth';
 import {
   getFirestore, doc, setDoc, getDoc, collection,
-  query, where, getDocs, writeBatch
+  query, where, getDocs, writeBatch， deleteDoc
 } from 'firebase/firestore';
 declare const __initial_auth_token: string | undefined;
 // ==========================================
@@ -590,6 +590,39 @@ class NotebookAdapter {
   // ----------- ADD -----------
   static async addVocabItems(user: FirebaseUser | null, groupId: string, courseId: string, vocabList: VocabItem[]) {
     const now = Date.now();
+    static async deleteItem(user: FirebaseUser | null, itemId: string) {
+      if (!user || !db) {
+        const localDB = LocalStorageManager.getDB();
+        localDB.notebookItems = (localDB.notebookItems as NotebookItem[]).filter(i => i.id !== itemId);
+        LocalStorageManager.saveDB(localDB);
+        return;
+      }
+      // Firestore 删除
+      // 注意：你当前没有 import deleteDoc，需要加：import { deleteDoc } from 'firebase/firestore';
+      await deleteDoc(doc(db, 'users', user.uid, 'notebook_items', itemId));
+    }
+
+    static async listAllItems(
+      user: FirebaseUser | null,
+      opts?: { type?: NotebookType; groupId?: string }
+    ): Promise<NotebookItem[]> {
+      if (!user || !db) {
+        const localDB = LocalStorageManager.getDB();
+        let items = (localDB.notebookItems as NotebookItem[]);
+        if (opts?.type) items = items.filter(it => it.type === opts.type);
+        if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+        items.sort((a, b) => b.createdAt - a.createdAt);
+        return items;
+      }
+    
+      const snap = await getDocs(collection(db, 'users', user.uid, 'notebook_items'));
+      let items: NotebookItem[] = [];
+      snap.forEach(d => items.push(d.data() as NotebookItem));
+      if (opts?.type) items = items.filter(it => it.type === opts.type);
+      if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
+      items.sort((a, b) => b.createdAt - a.createdAt);
+      return items;
+    }
 
     // 本地去重集合
     const localDB = LocalStorageManager.getDB();
@@ -1870,60 +1903,200 @@ return (
 };
 
 const ReviewCenterView: React.FC<{ user: FirebaseUser | null }> = ({ user }) => {
-  const [queue, setQueue] = useState<SRSItem[]>([]);
-  const [currentItem, setCurrentItem] = useState<SRSItem | null>(null);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [stats, setStats] = useState({ total: 0, pending: 0 });
+  const [items, setItems] = useState<NotebookItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filterType, setFilterType] = useState<NotebookType | 'all'>('all');
+  const [selected, setSelected] = useState<NotebookItem | null>(null);
 
-  useEffect(() => {
-    if (user && db) {
-      DBAdapter.getReviewQueue(user).then(items => { setQueue(items); setStats({ total: items.length, pending: items.length }); });
-    } else {
-      DBAdapter.getReviewQueue(null).then(items => { setQueue(items); setStats({ total: items.length, pending: items.length }); });
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const list = await NotebookAdapter.listAllItems(user);
+      setItems(list);
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
-
-  const handleGrade = async (grade: 'hard' | 'good' | 'easy') => {
-    if (!currentItem) return;
-    await DBAdapter.updateSRS(user, currentItem, grade);
-    const next = queue.slice(1);
-    setQueue(next); setCurrentItem(next[0] || null); setIsFlipped(false);
   };
 
-  if (!currentItem && queue.length > 0) return <div className="text-center py-20"><h2 className="text-2xl font-bold mb-4">今日待复习: {queue.length} 个</h2><button onClick={() => setCurrentItem(queue[0])} className="bg-black text-white px-8 py-3 rounded-full font-bold">开始</button></div>;
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-  if (currentItem) {
-    const vocab = currentItem.content as VocabItem;
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-xl mx-auto space-y-8 animate-in fade-in">
-        <div className="w-full flex justify-between items-center px-4"><span className="text-sm font-bold text-gray-400">剩余: {queue.length}</span><button onClick={() => setCurrentItem(null)} className="text-gray-400 hover:text-gray-900">退出</button></div>
-        <div onClick={() => setIsFlipped(!isFlipped)} className="w-full aspect-[4/3] bg-white rounded-3xl shadow-xl border border-gray-100 flex flex-col items-center justify-center cursor-pointer hover:shadow-2xl transition-all relative overflow-hidden group">
-          <div className="text-xs font-bold text-gray-300 absolute top-6 uppercase tracking-widest">{isFlipped ? '答案' : '问题'}</div>
-          {!isFlipped && <div className="text-5xl font-bold text-gray-900">{vocab.word.map(s => s.text).join('')}</div>}
-          {isFlipped && (
-            <div className="text-center space-y-4 animate-in fade-in slide-in-from-bottom-2">
-              <div className="text-4xl font-bold text-gray-900 mb-2"><FuriganaText segments={vocab.word} /></div>
-              <div className="text-xl text-indigo-600 font-medium">{vocab.meaning}</div>
-              <div className="text-sm text-gray-400 max-w-xs mx-auto">{vocab.example.translation}</div>
-              <div className="flex justify-center pt-2"><PlayButton text={vocab.word} size="lg" /></div>
-            </div>
-          )}
-          <div className="absolute bottom-4 text-xs text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">点击翻转</div>
+  const filtered = items.filter(it => (filterType === 'all' ? true : it.type === filterType));
+
+  const getTitle = (it: NotebookItem) => {
+    if (it.type === 'vocab') return (it.content as VocabItem).word?.map(s => s.text).join('') || '';
+    if (it.type === 'grammar') return (it.content as GrammarItem).point || '';
+    return (it.content as TextItem).text?.map(s => s.text).join('') || '';
+  };
+
+  const getSub = (it: NotebookItem) => {
+    if (it.type === 'vocab') return (it.content as VocabItem).meaning || '';
+    if (it.type === 'grammar') return (it.content as GrammarItem).explanation || '';
+    return (it.content as TextItem).translation || '';
+  };
+
+  const getBadge = (it: NotebookItem) =>
+    it.type === 'vocab' ? '单词' : it.type === 'grammar' ? '语法' : '课文';
+
+  return (
+    <div className="max-w-4xl mx-auto pt-6 space-y-6 animate-in fade-in">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">生词本中心</h2>
+          <p className="text-gray-500">你加过的单词 / 语法 / 课文都在这里。想删就删，主打一个自由。</p>
         </div>
-        {isFlipped && (
-          <div className="grid grid-cols-3 gap-4 w-full">
-            <button onClick={() => handleGrade('hard')} className="p-4 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition-colors">忘记</button>
-            <button onClick={() => handleGrade('good')} className="p-4 rounded-2xl bg-yellow-50 text-yellow-600 font-bold hover:bg-yellow-100 transition-colors">模糊</button>
-            <button onClick={() => handleGrade('easy')} className="p-4 rounded-2xl bg-green-50 text-green-600 font-bold hover:bg-green-100 transition-colors">掌握</button>
+
+        <button
+          onClick={refresh}
+          className="px-4 py-2 rounded-xl bg-gray-900 text-white font-bold text-sm hover:bg-gray-800 flex items-center gap-2"
+        >
+          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          刷新
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(['all', 'vocab', 'grammar', 'text'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setFilterType(t as any)}
+            className={`px-4 py-2 rounded-full text-sm font-bold border transition-all ${
+              filterType === t
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {t === 'all' ? '全部' : t === 'vocab' ? '单词' : t === 'grammar' ? '语法' : '课文'}
+            <span className="ml-2 text-xs opacity-80">
+              {t === 'all'
+                ? items.length
+                : items.filter(it => it.type === t).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="p-12 text-center text-gray-500">
+            {filterType === 'all' ? '还没有内容。去课程页点“加入单词本/语法本/课文本”。' : '这个分类还没有内容。'}
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filtered.map(it => (
+              <div key={it.id} className="p-5 flex items-start justify-between gap-4">
+                <div className="min-w-0 cursor-pointer" onClick={() => setSelected(it)}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                      {getBadge(it)}
+                    </span>
+                    <span className="text-xs text-gray-400">Group: {it.groupId}</span>
+                  </div>
+                  <div className="font-bold text-gray-900 truncate">{getTitle(it)}</div>
+                  <div className="text-sm text-gray-500 line-clamp-2 mt-1">{getSub(it)}</div>
+                </div>
+
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={async () => {
+                      await NotebookAdapter.deleteItem(user, it.id);
+                      await refresh();
+                    }}
+                    className="px-3 py-2 rounded-xl bg-red-50 text-red-600 font-bold text-xs hover:bg-red-100"
+                  >
+                    删除
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
-    );
-  }
-  return (
-    <div className="text-center py-20 space-y-6 animate-in fade-in"><div className="w-24 h-24 bg-indigo-100 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-6"><Clock size={48} /></div><h2 className="text-3xl font-bold text-gray-900">复习中心</h2><p className="text-gray-500 max-w-md mx-auto">智能 SRS 记忆算法帮助你巩固每一个知识点。</p><div className="py-8"><div className="text-6xl font-black text-gray-900 mb-2">{stats.pending}</div><div className="text-sm font-bold text-gray-400 uppercase tracking-widest">今日任务</div></div><button onClick={() => queue.length > 0 && setCurrentItem(queue[0])} disabled={queue.length === 0} className="bg-gray-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl shadow-gray-200">开始复习</button></div>
+
+      {/* 详情弹窗：可选保留，方便看完整内容；不想要也可以直接删掉这块 */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-2xl rounded-3xl p-8 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setSelected(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <div className="text-xs font-bold text-gray-400 uppercase mb-2">{getBadge(selected)}</div>
+                <div className="text-3xl font-black text-gray-900 break-words">{getTitle(selected)}</div>
+                <div className="text-gray-500 mt-2 break-words">{getSub(selected)}</div>
+                <div className="text-xs text-gray-400 mt-2">Group: {selected.groupId}</div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  await NotebookAdapter.deleteItem(user, selected.id);
+                  setSelected(null);
+                  await refresh();
+                }}
+                className="px-4 py-3 rounded-2xl bg-red-50 text-red-600 font-bold hover:bg-red-100"
+              >
+                删除此条
+              </button>
+            </div>
+
+            {/* 根据类型展示细节 */}
+            {selected.type === 'vocab' && (
+              <div className="bg-gray-50 rounded-2xl p-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-gray-900 text-xl">
+                    <FuriganaText segments={(selected.content as VocabItem).word} />
+                  </div>
+                  <PlayButton text={(selected.content as VocabItem).word} size="md" />
+                </div>
+                <div className="text-gray-700">{(selected.content as VocabItem).meaning}</div>
+                <div className="text-sm text-gray-500">
+                  例句：<FuriganaText segments={(selected.content as VocabItem).example.text} />
+                </div>
+                <div className="text-sm text-gray-400">{(selected.content as VocabItem).example.translation}</div>
+              </div>
+            )}
+
+            {selected.type === 'grammar' && (
+              <div className="bg-gray-50 rounded-2xl p-6 space-y-3">
+                <div className="font-bold text-indigo-600 text-xl">{(selected.content as GrammarItem).point}</div>
+                <div className="text-gray-700">{(selected.content as GrammarItem).explanation}</div>
+                <div className="flex items-start gap-3 pt-2">
+                  <PlayButton text={(selected.content as GrammarItem).example.text} size="sm" />
+                  <div>
+                    <FuriganaText segments={(selected.content as GrammarItem).example.text} className="text-lg font-medium text-gray-800" />
+                    <div className="text-sm text-gray-500 mt-1">{(selected.content as GrammarItem).example.translation}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selected.type === 'text' && (
+              <div className="bg-gray-50 rounded-2xl p-6 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-xl font-bold text-gray-900 leading-8">
+                    <FuriganaText segments={(selected.content as TextItem).text} />
+                  </div>
+                  <PlayButton text={(selected.content as TextItem).text} size="md" />
+                </div>
+                <div className="text-gray-600 border-t border-gray-200 pt-3">
+                  {(selected.content as TextItem).translation}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
+
 
 const DictionaryView: React.FC<{ settings: AppSettings }> = ({ settings }) => {
   const [query, setQuery] = useState("");
