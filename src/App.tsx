@@ -989,15 +989,15 @@ Structure:
       ? fill(AIService.GEMINI_COURSE_PROMPT)
       : fill(AIService.COURSE_PROMPT);
 
-  const json =
-    settings.selectedModel === 'gemini'
-      ? await AIService.callGemini(prompt, settings)
-      : await AIService.callOpenAI(prompt, settings)
-    );
+  const json = await (
+  settings.selectedModel === 'gemini'
+    ? AIService.callGemini(prompt, settings)
+    : AIService.callOpenAI(prompt, settings)
+);
 
-  const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
-  const course = { ...json, id, createdAt: Date.now(), level };
-  return AIService.normalizeCourse(course);
+const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
+const course = { ...json, id, createdAt: Date.now(), level };
+return AIService.normalizeCourse(course);
 
   }
 
