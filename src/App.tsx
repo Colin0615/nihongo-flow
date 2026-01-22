@@ -992,10 +992,13 @@ Structure:
   const json =
     settings.selectedModel === 'gemini'
       ? await AIService.callGemini(prompt, settings)
-      : await AIService.callOpenAI(prompt, settings);
+      : await AIService.callOpenAI(prompt, settings)
+    );
 
-  const course = { ...json, id: crypto.randomUUID(), createdAt: Date.now(), level };
+  const id = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
+  const course = { ...json, id, createdAt: Date.now(), level };
   return AIService.normalizeCourse(course);
+
   }
 
     const json = settings.selectedModel === 'gemini' ? await AIService.callGemini(prompt, settings) : await AIService.callOpenAI(prompt, settings);
