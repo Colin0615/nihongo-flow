@@ -1,4 +1,3 @@
-declare const __initial_auth_token: string | undefined;
 import React, { useState, useEffect, useRef, useMemo, useContext, createContext } from 'react';
 import {
   Settings, Book, Brain, GraduationCap, Play, Volume2, X, RefreshCw,
@@ -17,7 +16,7 @@ import {
   getFirestore, doc, setDoc, getDoc, collection,
   query, where, getDocs, writeBatch
 } from 'firebase/firestore';
-
+declare const __initial_auth_token: string | undefined;
 // ==========================================
 // 0. FIREBASE 配置
 // ==========================================
@@ -1868,7 +1867,7 @@ return (
       )}
     </div>
   );
-
+};
 
 const ReviewCenterView: React.FC<{ user: FirebaseUser | null }> = ({ user }) => {
   const [queue, setQueue] = useState<SRSItem[]>([]);
@@ -1922,7 +1921,7 @@ const ReviewCenterView: React.FC<{ user: FirebaseUser | null }> = ({ user }) => 
     );
   }
   return (
-    <div className="text-center py-20 space-y-6 animate-in fade-in"><div className="w-24 h-24 bg-indigo-100 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-6"><Clock size={48} /></div><h2 className="text-3xl font-bold text-gray-900">复习中心</h2><p className="text-gray-500 max-w-md mx-auto">智能 SRS 记忆算法帮助你巩固每一个知识点。</p><div className="py-8"><div className="text-6xl font-black text-gray-900 mb-2">{stats.pending}</div><div className="text-sm font-bold text-gray-400 uppercase tracking-widest">今日任务</div></div><button onClick={() => queue.length > 0 && setCurrentItem(queue[0])} disabled={queue.length === 0} className="bg-gray-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl shadow-gray-200">开始复习</button></div>;
+    <div className="text-center py-20 space-y-6 animate-in fade-in"><div className="w-24 h-24 bg-indigo-100 text-indigo-600 rounded-full mx-auto flex items-center justify-center mb-6"><Clock size={48} /></div><h2 className="text-3xl font-bold text-gray-900">复习中心</h2><p className="text-gray-500 max-w-md mx-auto">智能 SRS 记忆算法帮助你巩固每一个知识点。</p><div className="py-8"><div className="text-6xl font-black text-gray-900 mb-2">{stats.pending}</div><div className="text-sm font-bold text-gray-400 uppercase tracking-widest">今日任务</div></div><button onClick={() => queue.length > 0 && setCurrentItem(queue[0])} disabled={queue.length === 0} className="bg-gray-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl shadow-gray-200">开始复习</button></div>
   );
 };
 
