@@ -587,44 +587,14 @@ class DBAdapter {
 }
 
 class NotebookAdapter {
-  // ----------- ADD -----------
-  static async addVocabItems(user: FirebaseUser | null, groupId: string, courseId: string, vocabList: VocabItem[]) {
+  static async addVocabItems(
+    user: FirebaseUser | null,
+    groupId: string,
+    courseId: string,
+    vocabList: VocabItem[]
+  ) {
     const now = Date.now();
-    static async deleteItem(user: FirebaseUser | null, itemId: string) {
-      if (!user || !db) {
-        const localDB = LocalStorageManager.getDB();
-        localDB.notebookItems = (localDB.notebookItems as NotebookItem[]).filter(i => i.id !== itemId);
-        LocalStorageManager.saveDB(localDB);
-        return;
-      }
-      // Firestore 删除
-      // 注意：你当前没有 import deleteDoc，需要加：import { deleteDoc } from 'firebase/firestore';
-      await deleteDoc(doc(db, 'users', user.uid, 'notebook_items', itemId));
-    }
 
-    static async listAllItems(
-      user: FirebaseUser | null,
-      opts?: { type?: NotebookType; groupId?: string }
-    ): Promise<NotebookItem[]> {
-      if (!user || !db) {
-        const localDB = LocalStorageManager.getDB();
-        let items = (localDB.notebookItems as NotebookItem[]);
-        if (opts?.type) items = items.filter(it => it.type === opts.type);
-        if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
-        items.sort((a, b) => b.createdAt - a.createdAt);
-        return items;
-      }
-    
-      const snap = await getDocs(collection(db, 'users', user.uid, 'notebook_items'));
-      let items: NotebookItem[] = [];
-      snap.forEach(d => items.push(d.data() as NotebookItem));
-      if (opts?.type) items = items.filter(it => it.type === opts.type);
-      if (opts?.groupId) items = items.filter(it => it.groupId === opts.groupId);
-      items.sort((a, b) => b.createdAt - a.createdAt);
-      return items;
-    }
-
-    // 本地去重集合
     const localDB = LocalStorageManager.getDB();
     const existing = new Set<string>();
     for (const it of (localDB.notebookItems as NotebookItem[])) {
@@ -634,7 +604,7 @@ class NotebookAdapter {
     const toAdd: NotebookItem[] = [];
     for (const v of vocabList) {
       const dedupKey = makeVocabDedupKey(v);
-      if (existing.has(dedupKey)) continue; // ✅ 去重
+      if (existing.has(dedupKey)) continue;
       existing.add(dedupKey);
 
       const id = makeNotebookId(groupId, 'vocab', dedupKey);
@@ -650,14 +620,12 @@ class NotebookAdapter {
 
     if (!toAdd.length) return { added: 0, skipped: vocabList.length };
 
-    // 未登录：写本地
     if (!user || !db) {
       localDB.notebookItems.push(...toAdd);
       LocalStorageManager.saveDB(localDB);
       return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
     }
 
-    // 登录：写 Firestore（使用稳定 id，天然 upsert 去重）
     const batch = writeBatch(db);
     for (const item of toAdd) {
       const ref = doc(db, 'users', user.uid, 'notebook_items', item.id);
@@ -666,6 +634,20 @@ class NotebookAdapter {
     await batch.commit();
     return { added: toAdd.length, skipped: vocabList.length - toAdd.length };
   }
+
+  // ✅ 注意：deleteItem 在 addVocabItems 外面、同级
+  static async deleteItem(user: FirebaseUser | null, itemId: string) {
+    if (!user || !db) {
+      const localDB = LocalStorageManager.getDB();
+      localDB.notebookItems = (localDB.notebookItems as NotebookItem[]).filter(it => it.id !== itemId);
+      LocalStorageManager.saveDB(localDB);
+      return;
+    }
+    await deleteDoc(doc(db, 'users', user.uid, 'notebook_items', itemId));
+  }
+
+  // 你其他方法（addGrammarItems / addTextItems / listGroups / getReviewQueue / updateSRS ...）
+}
 
   static async addGrammarItems(user: FirebaseUser | null, groupId: string, courseId: string, grammarList: GrammarItem[]) {
     const now = Date.now();
