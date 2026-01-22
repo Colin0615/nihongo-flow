@@ -809,7 +809,7 @@ Structure:
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.openaiKey}` },
-      body: JSON.stringify({ model: "gpt-4o", response_format: { type: "json_object" }, messages })
+      body: JSON.stringify({ model: "gpt-5.2-2025-12-11", response_format: { type: "json_object" }, messages })
     });
     const data = await res.json();
     if (data.error) throw new Error(`OpenAI Error: ${data.error.message}`);
@@ -1082,7 +1082,7 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
             ))}
           </div>
         </div>
-        <div className="flex justify-center gap-2 text-xs text-gray-400"><span>模型: {settings.selectedModel === 'gemini' ? '⚡ Gemini 3 Flash' : '🧠 GPT-4o'}</span></div>
+        <div className="flex justify-center gap-2 text-xs text-gray-400"><span>模型: {settings.selectedModel === 'gemini' ? '⚡ Gemini 3 Flash' : '🧠 gpt-5.2'}</span></div>
         {errorMsg && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{errorMsg}</div>}
       </div>
 
@@ -1290,7 +1290,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (s
             <label className="block text-xs font-bold text-gray-400 uppercase mb-2">文本生成模型 (AI Tutor)</label>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setSettings({ ...settings, selectedModel: 'gemini' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'gemini' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'text-gray-500'}`}>⚡ Gemini 3 Flash</button>
-              <button onClick={() => setSettings({ ...settings, selectedModel: 'openai' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'openai' ? 'bg-green-50 border-green-500 text-green-700' : 'text-gray-500'}`}>🧠 GPT-4</button>
+              <button onClick={() => setSettings({ ...settings, selectedModel: 'openai' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'openai' ? 'bg-green-50 border-green-500 text-green-700' : 'text-gray-500'}`}>🧠 gpt-5.2/button>
             </div>
           </div>
 
