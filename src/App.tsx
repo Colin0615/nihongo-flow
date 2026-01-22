@@ -1658,52 +1658,99 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
             </div>
           </section>
 
-          <section>
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><div className="w-1 h-6 bg-emerald-500 rounded-full" /> 对话与短文</h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-gray-400 text-xs uppercase">场景对话</h4>
+         <section>
+          <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <div className="w-1 h-6 bg-emerald-500 rounded-full" /> 对话与短文
+          </h3>
+        
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* 左：对话 */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold text-gray-400 text-xs uppercase">场景对话</h4>
+                <button
+                  onClick={() => addTextToNotebook(course.texts.dialogue)}
+                  className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
+                >
+                  对话全加入课文本
+                </button>
+              </div>
+        
+              {course.texts.dialogue.map((line: any, i: number) => (
+                <div key={i} className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                    {line.role}
+                  </div>
+        
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <PlayButton text={line.text} size="sm" />
+                          <FuriganaText segments={line.text} className="text-lg font-medium" />
+                        </div>
+                        <p className="text-sm text-gray-400 pl-8">{line.translation}</p>
+                      </div>
+        
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addTextToNotebook([line]); }}
+                        className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                      >
+                        加入
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+        
+            {/* 右：短文 */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="flex justify-between items-center mb-4 gap-2">
+                <h4 className="font-bold text-gray-400 text-xs uppercase">{course.texts.essay.title}</h4>
+        
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => addTextToNotebook(course.texts.dialogue)}
+                    onClick={() => addTextToNotebook(course.texts.essay.content)}
                     className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-2 rounded-full hover:bg-emerald-100"
                   >
-                    对话全加入课文本
+                    短文全加入课文本
                   </button>
+                  <EssayPlayer segments={course.texts.essay.content} />
                 </div>
-                {course.texts.dialogue.map((line: any, i: number) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
-                      {line.role}
-                    </div>
-                
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-2">
+              </div>
+        
+              <div className="space-y-6">
+                {course.texts.essay.content.map((sent: any, i: number) => (
+                  <div
+                    key={i}
+                    className="group cursor-pointer hover:bg-gray-50 rounded-lg p-2 -mx-2 transition-colors"
+                  >
+                    <div className="flex gap-3 items-start justify-between">
+                      <div className="flex gap-3 items-start">
+                        <PlayButton text={sent.text} size="sm" />
                         <div>
-                          <div className="flex items-center gap-2">
-                            <PlayButton text={line.text} size="sm" />
-                            <FuriganaText segments={line.text} className="text-lg font-medium" />
+                          <FuriganaText segments={sent.text} className="text-lg text-gray-800 leading-8" />
+                          <div className="text-sm text-gray-500 mt-1 border-t border-gray-100 pt-1">
+                            {sent.translation}
                           </div>
-                          <p className="text-sm text-gray-400 pl-8">{line.translation}</p>
                         </div>
-                
-                        <button
-                          onClick={(e) => { e.stopPropagation(); addTextToNotebook([line]); }}
-                          className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
-                        >
-                          加入
-                        </button>
                       </div>
+        
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addTextToNotebook([sent]); }}
+                        className="text-[11px] font-bold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full hover:bg-gray-200 shrink-0"
+                      >
+                        加入
+                      </button>
                     </div>
                   </div>
                 ))}
-
-
-                </div>
               </div>
             </div>
-          </section>
-          <div className="flex justify-center pb-10"><button onClick={handleSave} disabled={isSaved} className={`px-8 py-4 rounded-full font-bold flex items-center gap-2 transition-all shadow-lg ${isSaved ? 'bg-green-100 text-green-700' : 'bg-gray-900 text-white hover:scale-105'}`}>{isSaved ? <CheckCircle size={20} /> : <Save size={20} />} {isSaved ? '已归档' : '完成并归档'}</button></div>
+          </div>
+        </section>
+        <div className="flex justify-center pb-10"><button onClick={handleSave} disabled={isSaved} className={`px-8 py-4 rounded-full font-bold flex items-center gap-2 transition-all shadow-lg ${isSaved ? 'bg-green-100 text-green-700' : 'bg-gray-900 text-white hover:scale-105'}`}>{isSaved ? <CheckCircle size={20} /> : <Save size={20} />} {isSaved ? '已归档' : '完成并归档'}</button></div>
         </div>
       )}
       {selectedVocab && (
