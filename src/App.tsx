@@ -1290,7 +1290,7 @@ const SettingsModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (s
             <label className="block text-xs font-bold text-gray-400 uppercase mb-2">文本生成模型 (AI Tutor)</label>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setSettings({ ...settings, selectedModel: 'gemini' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'gemini' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'text-gray-500'}`}>⚡ Gemini 3 Flash</button>
-              <button onClick={() => setSettings({ ...settings, selectedModel: 'openai' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'openai' ? 'bg-green-50 border-green-500 text-green-700' : 'text-gray-500'}`}>🧠 gpt-5.2/button>
+              <button onClick={() => setSettings({ ...settings, selectedModel: 'openai' })} className={`p-2 border rounded-lg text-sm font-bold ${settings.selectedModel === 'openai' ? 'bg-green-50 border-green-500 text-green-700' : 'text-gray-500'}`}>🧠 gpt-5.2</button>
             </div>
           </div>
 
