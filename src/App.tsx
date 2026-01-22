@@ -1753,75 +1753,67 @@ const CourseGeneratorView: React.FC<any> = ({ settings, user, topic, setTopic, l
         <div className="flex justify-center pb-10"><button onClick={handleSave} disabled={isSaved} className={`px-8 py-4 rounded-full font-bold flex items-center gap-2 transition-all shadow-lg ${isSaved ? 'bg-green-100 text-green-700' : 'bg-gray-900 text-white hover:scale-105'}`}>{isSaved ? <CheckCircle size={20} /> : <Save size={20} />} {isSaved ? '已归档' : '完成并归档'}</button></div>
         </div>
       )}
-      {selectedVocab && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setSelectedVocab(null)}
-              className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
-            >
-              <X size={20} />
-            </button>
-      
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-wider">
-                {selectedVocab.grammar_tag}
-              </div>
-      
-              <div className="text-5xl font-bold text-gray-900 mb-2">
-                <FuriganaText segments={selectedVocab.word} />
-              </div>
-      
-              <PlayButton text={selectedVocab.word} size="lg" />
-      
-              <p className="text-xl text-gray-600 font-medium">{selectedVocab.meaning}</p>
-      
-              <div className="w-full bg-gray-50 rounded-2xl p-6 mt-6 text-left">
-                <div className="text-xs text-gray-400 font-bold uppercase mb-3">例句</div>
-      
-                <div className="flex gap-3 items-start mb-2">
-                  <PlayButton text={selectedVocab.example.text} size="sm" />
-                  <FuriganaText
-                    segments={selectedVocab.example.text}
-                    className="text-lg font-medium text-gray-800"
-                  />
-                </div>
-      
-                <p className="text-sm text-gray-500 pl-9">{selectedVocab.example.translation}</p>
-      
-                {selectedVocab.example.grammar_point && (
-                  <div className="mt-4 pt-3 border-t border-gray-200/50">
-                    <div className="flex gap-2 items-center mb-1">
-                      <Brain size={14} className="text-pink-500" />
-                      <span className="text-xs font-bold text-gray-400 uppercase">语法深度解析</span>
-                    </div>
-                    <p className="text-sm text-gray-700 leading-relaxed pl-6">
-                      {selectedVocab.example.grammar_point}
-                    </p>
-                  </div>
-                )}
-              </div>
-      
-              <button
-                onClick={() => addVocabToNotebook([selectedVocab])}
-                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-2"
-              >
-                加入单词本（自动去重）
-              </button>
+{selectedVocab && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+        <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <button
+            onClick={() => setSelectedVocab(null)}
+            className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+          >
+            <X size={20} />
+          </button>
+
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-wider">
+              {selectedVocab.grammar_tag}
             </div>
+
+            <div className="text-5xl font-bold text-gray-900 mb-2">
+              <FuriganaText segments={selectedVocab.word} />
+            </div>
+
+            <PlayButton text={selectedVocab.word} size="lg" />
+
+            <p className="text-xl text-gray-600 font-medium">{selectedVocab.meaning}</p>
+
+            <div className="w-full bg-gray-50 rounded-2xl p-6 mt-6 text-left">
+              <div className="text-xs text-gray-400 font-bold uppercase mb-3">例句</div>
+
+              <div className="flex gap-3 items-start mb-2">
+                <PlayButton text={selectedVocab.example.text} size="sm" />
+                <FuriganaText
+                  segments={selectedVocab.example.text}
+                  className="text-lg font-medium text-gray-800"
+                />
+              </div>
+
+              <p className="text-sm text-gray-500 pl-9">{selectedVocab.example.translation}</p>
+
+              {selectedVocab.example.grammar_point && (
+                <div className="mt-4 pt-3 border-t border-gray-200/50">
+                  <div className="flex gap-2 items-center mb-1">
+                    <Brain size={14} className="text-pink-500" />
+                    <span className="text-xs font-bold text-gray-400 uppercase">语法深度解析</span>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed pl-6">
+                    {selectedVocab.example.grammar_point}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => addVocabToNotebook([selectedVocab])}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-2"
+            >
+              加入单词本（自动去重）
+            </button>
           </div>
         </div>
-      )}
-
-    </div>
-    <button
-      onClick={() => addVocabToNotebook([selectedVocab])}
-      className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 mt-4"
-    >
-      加入单词本（自动去重）
-    </button>
-  );
-};
+      </div>
+    )}
+  </div>
+);
 
 const ReviewCenterView: React.FC<{ user: FirebaseUser | null }> = ({ user }) => {
   const [queue, setQueue] = useState<SRSItem[]>([]);
