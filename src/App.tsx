@@ -14,7 +14,7 @@ import {
 import type { User as FirebaseUser } from 'firebase/auth';
 import {
   getFirestore, doc, setDoc, getDoc, collection,
-  query, where, getDocs, writeBatch， deleteDoc
+  query, where, getDocs, writeBatch, deleteDoc
 } from 'firebase/firestore';
 declare const __initial_auth_token: string | undefined;
 // ==========================================
